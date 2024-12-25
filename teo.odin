@@ -138,9 +138,10 @@ editor_read_key :: proc() -> u8 {
 }
 
 editor_draw_rows :: proc() {
-	for i in 0 ..< config.screen_rows {
+	for i in 0 ..< config.screen_rows - 1 {
 		os.write(os.stdout, transmute([]u8)string("~\r\n"))
 	}
+	os.write(os.stdout, transmute([]u8)string("~"))
 }
 
 CLEAR_SCREEN :: "\x1b[2J"

@@ -5,12 +5,12 @@ package teo
 //generally the same I just need to figure out how to do it in Odin instead
 //of just doing it in C like the url does
 
+import "base:runtime"
 import "core:c/libc"
 import "core:fmt"
 import "core:io"
 import "core:os"
 import "core:sys/posix"
-import "base:runtime"
 
 ctrl_key :: #force_inline proc(key: u8) -> u8 {
 	return key & 0x1f
@@ -19,25 +19,10 @@ ctrl_key :: #force_inline proc(key: u8) -> u8 {
 main :: proc() {
 	enable_raw_mode()
 
-	buf := make([dynamic]byte)
-	defer delete(buf)
-
-	input_stream := os.stream_from_handle(os.stdin)
-
 	for {
-		char, err := io.read_byte(input_stream)
-		switch {
-		case err != nil:
-			fmt.eprintf("\nError: %v\r\n", err)
-			os.exit(1)
-		case char == ctrl_key('q'):
-			os.exit(0)
-		case bool(libc.iscntrl(i32(char))):
-			fmt.printf("%d\r\n", char)
-		case:
-			fmt.printf("%v\r\n", rune(char))
-		}
+		editor_process_keypress()
 	}
+
 }
 
 // setting up terminal
@@ -73,4 +58,27 @@ disable_raw_mode :: proc "c" () {
 		"failed setting term back to defaults... no idea what would have caused this so good luck",
 	)
 
+}
+
+editor_process_keypress :: proc() {
+	char := editor_read_key()
+	switch {
+	case char == ctrl_key('q'):
+		os.exit(0)
+	}
+}
+
+editor_read_key :: proc() -> u8 {
+	buf := make([dynamic]byte)
+
+	input_stream := os.stream_from_handle(os.stdin)
+
+	char, err := io.read_byte(input_stream)
+	switch {
+	case err != nil:
+		fmt.eprintf("\nError: %v\r\n", err)
+		os.exit(1)
+	}
+
+	return char
 }

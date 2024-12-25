@@ -1,0 +1,37 @@
+version: '3'
+
+
+tasks:
+  rel_build:
+    cmds:
+      - task: create-build-dir
+      - odin build . {{.CLI_ARGS}} -out:build/teo -o:speed
+
+  build:
+    cmds:
+      - task: create-build-dir
+      - odin build . {{.CLI_ARGS}} -out:build/teo
+
+  run:
+    cmds:
+      - task: create-build-dir
+      - odin run . {{.CLI_ARGS}} -out:build/teo
+
+  test:
+    cmds:
+      - task: create-build-dir
+      - odin test . {{.CLI_ARGS}} -out:build/teo_test
+
+  debug-test:
+    cmds:
+      - task: create-build-dir
+      - odin test . {{.CLI_ARGS}} -define:ODIN_TEST_LOG_LEVEL=debug -out:build/teo_debug_test
+
+  clean:
+    cmds:
+      - rm -rf build/
+
+  create-build-dir:
+    internal: true
+    cmds:
+      - mkdir -p build

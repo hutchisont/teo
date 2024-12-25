@@ -12,6 +12,10 @@ import "core:os"
 import "core:sys/posix"
 import "base:runtime"
 
+ctrl_key :: #force_inline proc(key: u8) -> u8 {
+	return key & 0x1f
+}
+
 main :: proc() {
 	enable_raw_mode()
 
@@ -26,7 +30,7 @@ main :: proc() {
 		case err != nil:
 			fmt.eprintf("\nError: %v\r\n", err)
 			os.exit(1)
-		case char == 'q':
+		case char == ctrl_key('q'):
 			os.exit(0)
 		case bool(libc.iscntrl(i32(char))):
 			fmt.printf("%d\r\n", char)

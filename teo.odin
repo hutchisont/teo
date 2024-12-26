@@ -6,8 +6,8 @@ package teo
 //of just doing it in C like the url does
 
 import "base:runtime"
-import "core:c/libc"
 import "core:c"
+import "core:c/libc"
 import "core:fmt"
 import "core:io"
 import "core:os"
@@ -27,7 +27,7 @@ ctrl_key :: #force_inline proc(key: u8) -> u8 {
 }
 
 die :: proc(err: string) {
-	clear_screen_and_reposition()
+	clear_screen_and_reposition_now()
 	fmt.printf(err, libc.errno())
 	os.exit(1)
 }
@@ -91,10 +91,10 @@ disable_raw_mode :: proc "c" () {
 
 get_window_size :: proc() -> (row: int, col: int, ok: bool) {
 	winsize :: struct {
-		ws_row: c.ushort,
-		ws_col: c.ushort,
+		ws_row:     c.ushort,
+		ws_col:     c.ushort,
 		// according to https://linux.die.net/man/4/tty_ioctl these are actually unused
-		ws_xpixel: c.ushort,
+		ws_xpixel:  c.ushort,
 		ws_y_pixel: c.ushort,
 	}
 
@@ -112,11 +112,16 @@ get_window_size :: proc() -> (row: int, col: int, ok: bool) {
 	}
 }
 
+
+eb_append :: proc(eb: ^[dynamic]u8, data: []u8) {
+	append(eb, ..data)
+}
+
 editor_process_keypress :: proc() {
 	char := editor_read_key()
 	switch {
 	case char == ctrl_key('q'):
-		clear_screen_and_reposition()
+		clear_screen_and_reposition_now()
 		os.exit(0)
 	}
 }
@@ -129,7 +134,7 @@ editor_read_key :: proc() -> u8 {
 	char, err := io.read_byte(input_stream)
 	switch {
 	case err != nil:
-		clear_screen_and_reposition()
+		clear_screen_and_reposition_now()
 		fmt.eprintf("\nError: %v\r\n", err)
 		os.exit(1)
 	}
@@ -137,24 +142,34 @@ editor_read_key :: proc() -> u8 {
 	return char
 }
 
-editor_draw_rows :: proc() {
+editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< config.screen_rows - 1 {
-		os.write(os.stdout, transmute([]u8)string("~\r\n"))
+		eb_append(eb, transmute([]u8)string("~\r\n"))
 	}
-	os.write(os.stdout, transmute([]u8)string("~"))
+	eb_append(eb, transmute([]u8)string("~"))
 }
 
 CLEAR_SCREEN :: "\x1b[2J"
 SET_CURSOR_TO_TOP :: "\x1b[H"
 
-clear_screen_and_reposition :: proc() {
+clear_screen_and_reposition_now :: proc() {
 	os.write(os.stdout, transmute([]u8)string(CLEAR_SCREEN))
 	os.write(os.stdout, transmute([]u8)string(SET_CURSOR_TO_TOP))
 }
 
-editor_refresh_screen :: proc() {
-	clear_screen_and_reposition()
-	editor_draw_rows()
+clear_screen_and_reposition :: proc(eb: ^[dynamic]u8) {
+	eb_append(eb, transmute([]u8)string(CLEAR_SCREEN))
+	eb_append(eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
+}
 
-	os.write(os.stdout, transmute([]u8)string(SET_CURSOR_TO_TOP))
+editor_refresh_screen :: proc() {
+	eb := make([dynamic]u8)
+	defer delete(eb)
+
+	clear_screen_and_reposition(&eb)
+	editor_draw_rows(&eb)
+
+	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
+
+	os.write(os.stdout, eb[:])
 }

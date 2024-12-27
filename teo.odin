@@ -186,13 +186,21 @@ editor_process_keypress :: proc() {
 editor_move_cursor :: proc(key: int) {
 	switch Editor_Key(key) {
 	case .Arrow_Left:
-		Config.cursor_x -= 1
+		if Config.cursor_x != 0 {
+			Config.cursor_x -= 1
+		}
 	case .Arrow_Right:
-		Config.cursor_x += 1
+		if Config.cursor_x != Config.screen_cols - 1 {
+			Config.cursor_x += 1
+		}
 	case .Arrow_Up:
-		Config.cursor_y -= 1
+		if Config.cursor_y != 0 {
+			Config.cursor_y -= 1
+		}
 	case .Arrow_Down:
-		Config.cursor_y += 1
+		if Config.cursor_y != Config.screen_rows - 1 {
+			Config.cursor_y += 1
+		}
 	}
 }
 

@@ -145,10 +145,25 @@ eb_append_string :: proc(eb: ^[dynamic]u8, data: string) {
 
 editor_process_keypress :: proc() {
 	char := editor_read_key()
-	switch {
-	case char == ctrl_key('q'):
+	switch char {
+	case ctrl_key('q'):
 		clear_screen_and_reposition_now()
 		os.exit(0)
+	case 'w', 'a', 's', 'd':
+		editor_move_cursor(char)
+	}
+}
+
+editor_move_cursor :: proc(key: u8) {
+	switch key {
+	case 'a':
+		Config.cursor_x -= 1
+	case 'd':
+		Config.cursor_x += 1
+	case 'w':
+		Config.cursor_y -= 1
+	case 's':
+		Config.cursor_y += 1
 	}
 }
 

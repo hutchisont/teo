@@ -127,8 +127,17 @@ get_window_size :: proc() -> (row: int, col: int, ok: bool) {
 
 // backing buffer for editor
 
-eb_append :: proc(eb: ^[dynamic]u8, data: []u8) {
+eb_append :: proc {
+	eb_append_slice,
+	eb_append_string
+}
+
+eb_append_slice :: proc(eb: ^[dynamic]u8, data: []u8) {
 	append(eb, ..data)
+}
+
+eb_append_string :: proc(eb: ^[dynamic]u8, data: string) {
+	append(eb, ..transmute([]u8)data)
 }
 
 editor_process_keypress :: proc() {
@@ -161,19 +170,22 @@ editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 		if i == Config.screen_rows / 3 {
 			buf := make([]byte, Config.screen_rows, context.temp_allocator)
 			fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
-			centered := strings.center_justify(
-				transmute(string)buf,
-				Config.screen_cols,
-				" ",
-				context.temp_allocator,
-			)
-			eb_append(eb, transmute([]u8)centered)
+			padding := (Config.screen_cols - len(buf)) / 2
+			if padding > 0 {
+				eb_append(eb, "~")
+				padding -= 1
+			}
+			for padding > 0 {
+				eb_append(eb, " ")
+				padding -= 1
+			}
+			eb_append(eb, buf)
 		} else {
-			eb_append(eb, transmute([]u8)string("~"))
+			eb_append(eb, "~")
 		}
-		eb_append(eb, transmute([]u8)string(CLEAR_CURRENT_LINE))
+		eb_append(eb, CLEAR_CURRENT_LINE)
 		if i < Config.screen_rows - 1 {
-			eb_append(eb, transmute([]u8)string("\r\n"))
+			eb_append(eb, "\r\n")
 		}
 	}
 }
@@ -186,13 +198,13 @@ clear_screen_and_reposition_now :: proc() {
 editor_refresh_screen :: proc() {
 	eb := make([dynamic]u8, context.temp_allocator)
 
-	eb_append(&eb, transmute([]u8)string(HIDE_CURSOR))
-	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
+	eb_append(&eb, HIDE_CURSOR)
+	eb_append(&eb, SET_CURSOR_TO_TOP)
 
 	editor_draw_rows(&eb)
 
-	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
-	eb_append(&eb, transmute([]u8)string(SHOW_CURSOR))
+	eb_append(&eb, SET_CURSOR_TO_TOP)
+	eb_append(&eb, SHOW_CURSOR)
 
 	os.write(os.stdout, eb[:])
 }

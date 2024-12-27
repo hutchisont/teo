@@ -16,13 +16,21 @@ import "core:sys/posix"
 
 VERSION :: "0.0.1"
 
+// Terminal escape codes/commands
+CLEAR_SCREEN :: "\x1b[2J"
+CLEAR_CURRENT_LINE :: "\x1b[K"
+SET_CURSOR_TO_TOP :: "\x1b[H"
+HIDE_CURSOR :: "\x1b[?25l"
+SHOW_CURSOR :: "\x1b[?25h"
+
+
 Editor_Config :: struct {
 	orig_term_mode: posix.termios,
 	screen_rows:    int,
 	screen_cols:    int,
 }
 
-config: Editor_Config
+Config: Editor_Config
 
 ctrl_key :: #force_inline proc(key: u8) -> u8 {
 	return key & 0x1f
@@ -51,21 +59,21 @@ init_editor :: proc() {
 		die("failed to get window size")
 	}
 
-	config.screen_rows = rows
-	config.screen_cols = cols
+	Config.screen_rows = rows
+	Config.screen_cols = cols
 }
 
 // setting up terminal
 
 enable_raw_mode :: proc() {
-	res := posix.tcgetattr(posix.STDIN_FILENO, &config.orig_term_mode)
+	res := posix.tcgetattr(posix.STDIN_FILENO, &Config.orig_term_mode)
 	if res != .OK {
 		die("failed to get terminal attributes, did you change stdin to being a pipe or a file?")
 	}
 
 	posix.atexit(disable_raw_mode)
 
-	mode := config.orig_term_mode
+	mode := Config.orig_term_mode
 	mode.c_iflag -= {.ICRNL, .IXON, .BRKINT, .INPCK, .ISTRIP}
 	mode.c_oflag -= {.OPOST}
 	mode.c_cflag += {.CS8}
@@ -84,7 +92,7 @@ enable_raw_mode :: proc() {
 disable_raw_mode :: proc "c" () {
 	context = runtime.default_context()
 
-	res := posix.tcsetattr(posix.STDIN_FILENO, .TCSAFLUSH, &config.orig_term_mode)
+	res := posix.tcsetattr(posix.STDIN_FILENO, .TCSAFLUSH, &Config.orig_term_mode)
 	if res != .OK {
 		die(
 			"failed setting term back to defaults... no idea what would have caused this so good luck",
@@ -148,26 +156,24 @@ editor_read_key :: proc() -> u8 {
 }
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
-	for i in 0 ..< config.screen_rows {
-		if i == config.screen_rows / 3 {
+	for i in 0 ..< Config.screen_rows {
+		if i == Config.screen_rows / 3 {
 			buf := make([]byte, 80, context.temp_allocator)
 			fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
-			eb_append(eb, buf)
+			if len(buf) > Config.screen_cols {
+				eb_append(eb, buf[:Config.screen_cols])
+			} else {
+				eb_append(eb, buf)
+			}
 		} else {
 			eb_append(eb, transmute([]u8)string("~"))
 		}
 		eb_append(eb, transmute([]u8)string(CLEAR_CURRENT_LINE))
-		if i < config.screen_rows - 1 {
+		if i < Config.screen_rows - 1 {
 			eb_append(eb, transmute([]u8)string("\r\n"))
 		}
 	}
 }
-
-CLEAR_SCREEN :: "\x1b[2J"
-CLEAR_CURRENT_LINE :: "\x1b[K"
-SET_CURSOR_TO_TOP :: "\x1b[H"
-HIDE_CURSOR :: "\x1b[?25l"
-SHOW_CURSOR :: "\x1b[?25h"
 
 clear_screen_and_reposition_now :: proc() {
 	os.write(os.stdout, transmute([]u8)string(CLEAR_SCREEN))

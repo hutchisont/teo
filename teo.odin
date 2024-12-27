@@ -14,6 +14,8 @@ import "core:os"
 import "core:sys/linux"
 import "core:sys/posix"
 
+VERSION :: "0.0.1"
+
 Editor_Config :: struct {
 	orig_term_mode: posix.termios,
 	screen_rows:    int,
@@ -37,6 +39,7 @@ main :: proc() {
 	init_editor()
 
 	for {
+		free_all(context.temp_allocator)
 		editor_refresh_screen()
 		editor_process_keypress()
 	}
@@ -113,6 +116,8 @@ get_window_size :: proc() -> (row: int, col: int, ok: bool) {
 }
 
 
+// backing buffer for editor
+
 eb_append :: proc(eb: ^[dynamic]u8, data: []u8) {
 	append(eb, ..data)
 }
@@ -144,7 +149,13 @@ editor_read_key :: proc() -> u8 {
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< config.screen_rows {
-		eb_append(eb, transmute([]u8)string("~"))
+		if i == config.screen_rows / 3 {
+			buf := make([]byte, 80, context.temp_allocator)
+			fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
+			eb_append(eb, buf)
+		} else {
+			eb_append(eb, transmute([]u8)string("~"))
+		}
 		eb_append(eb, transmute([]u8)string(CLEAR_CURRENT_LINE))
 		if i < config.screen_rows - 1 {
 			eb_append(eb, transmute([]u8)string("\r\n"))
@@ -164,8 +175,7 @@ clear_screen_and_reposition_now :: proc() {
 }
 
 editor_refresh_screen :: proc() {
-	eb := make([dynamic]u8)
-	defer delete(eb)
+	eb := make([dynamic]u8, context.temp_allocator)
 
 	eb_append(&eb, transmute([]u8)string(HIDE_CURSOR))
 	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))

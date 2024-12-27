@@ -42,6 +42,7 @@ Editor_Key :: enum {
 	Arrow_Right,
 	Arrow_Up,
 	Arrow_Down,
+	Del,
 	Home,
 	End,
 	Page_Up,
@@ -179,6 +180,9 @@ editor_process_keypress :: proc() {
 
 	switch Editor_Key(char) {
 
+	case .Del:
+		// do nothing for now
+
 	case .Home:
 		Config.cursor_x = 0
 	case .End:
@@ -259,6 +263,8 @@ editor_read_key :: proc() -> int {
 
 				if seq[2] == '~' {
 					switch seq[1] {
+					case '3':
+						return int(Editor_Key.Del)
 					case '1', '7':
 						return int(Editor_Key.Home)
 					case '4', '8':

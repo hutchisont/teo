@@ -26,12 +26,17 @@ SET_CURSOR_TO_LOCATION :: "\x1b[%d;%dH" // y, x
 HIDE_CURSOR :: "\x1b[?25l"
 SHOW_CURSOR :: "\x1b[?25h"
 
+Editor_Row :: struct {
+	data: []u8,
+}
 
 Editor_Config :: struct {
 	cursor_x:       int,
 	cursor_y:       int,
 	screen_rows:    int,
 	screen_cols:    int,
+	num_rows:       int,
+	row:            Editor_Row,
 	orig_term_mode: posix.termios,
 }
 
@@ -78,6 +83,7 @@ main :: proc() {
 
 	enable_raw_mode()
 	init_editor()
+	editor_open()
 
 	for {
 		free_all(context.temp_allocator)
@@ -92,7 +98,6 @@ init_editor :: proc() {
 	if !ok {
 		die("failed to get window size")
 	}
-
 	Config.screen_rows = rows
 	Config.screen_cols = cols
 }
@@ -164,11 +169,21 @@ eb_append :: proc {
 }
 
 eb_append_slice :: proc(eb: ^[dynamic]u8, data: []u8) {
-	append(eb, ..data)
+	if len(data) > Config.screen_cols {
+		log.warn("truncating data to fit in column...\n data is: %v", data)
+		append(eb, ..data[:Config.screen_cols])
+	} else {
+		append(eb, ..data)
+	}
 }
 
 eb_append_string :: proc(eb: ^[dynamic]u8, data: string) {
-	append(eb, ..transmute([]u8)data)
+	if len(data) > Config.screen_cols {
+		log.warn("truncating data to fit in column...\n data is: %v", data)
+		append(eb, ..transmute([]u8)data[:Config.screen_cols])
+	} else {
+		append(eb, ..transmute([]u8)data)
+	}
 }
 
 editor_process_keypress :: proc() {
@@ -181,7 +196,7 @@ editor_process_keypress :: proc() {
 	switch Editor_Key(char) {
 
 	case .Del:
-		// do nothing for now
+	// do nothing for now
 
 	case .Home:
 		Config.cursor_x = 0
@@ -309,22 +324,27 @@ editor_read_key :: proc() -> int {
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< Config.screen_rows {
-		if i == Config.screen_rows / 3 {
-			buf := make([]byte, Config.screen_rows, context.temp_allocator)
-			fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
-			padding := (Config.screen_cols - len(buf)) / 2
-			if padding > 0 {
+		if i >= Config.num_rows {
+			if i == Config.screen_rows / 3 {
+				buf := make([]byte, Config.screen_rows, context.temp_allocator)
+				fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
+				padding := (Config.screen_cols - len(buf)) / 2
+				if padding > 0 {
+					eb_append(eb, "~")
+					padding -= 1
+				}
+				for padding > 0 {
+					eb_append(eb, " ")
+					padding -= 1
+				}
+				eb_append(eb, buf)
+			} else {
 				eb_append(eb, "~")
-				padding -= 1
 			}
-			for padding > 0 {
-				eb_append(eb, " ")
-				padding -= 1
-			}
-			eb_append(eb, buf)
 		} else {
-			eb_append(eb, "~")
+			eb_append(eb, Config.row.data)
 		}
+
 		eb_append(eb, CLEAR_CURRENT_LINE)
 		if i < Config.screen_rows - 1 {
 			eb_append(eb, "\r\n")
@@ -353,4 +373,11 @@ editor_refresh_screen :: proc() {
 	eb_append(&eb, SHOW_CURSOR)
 
 	os.write(os.stdout, eb[:])
+}
+
+editor_open :: proc() {
+	data: string : "Hello, world!"
+
+	Config.row.data = transmute([]u8)strings.clone(data)
+	Config.num_rows += 1
 }

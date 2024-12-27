@@ -42,6 +42,8 @@ Editor_Key :: enum {
 	Arrow_Right,
 	Arrow_Up,
 	Arrow_Down,
+	Home,
+	End,
 	Page_Up,
 	Page_Down,
 }
@@ -78,6 +80,7 @@ main :: proc() {
 
 	for {
 		free_all(context.temp_allocator)
+
 		editor_refresh_screen()
 		editor_process_keypress()
 	}
@@ -169,26 +172,28 @@ eb_append_string :: proc(eb: ^[dynamic]u8, data: string) {
 
 editor_process_keypress :: proc() {
 	char := editor_read_key()
-	switch {
-	case char == int(ctrl_key('q')):
+	if int(char) == int(ctrl_key('q')) {
 		clear_screen_and_reposition_now()
 		os.exit(0)
-	case Editor_Key(char) == .Page_Up:
+	}
+
+	switch Editor_Key(char) {
+
+	case .Home:
+		Config.cursor_x = 0
+	case .End:
+		Config.cursor_x = Config.screen_cols - 1
+
+	case .Page_Up:
 		for i := Config.screen_rows; i > 0; i -= 1 {
 			editor_move_cursor(int(Editor_Key.Arrow_Up))
 		}
-	case Editor_Key(char) == .Page_Down:
+	case .Page_Down:
 		for i := Config.screen_rows; i > 0; i -= 1 {
 			editor_move_cursor(int(Editor_Key.Arrow_Down))
 		}
-	case Editor_Key(char) ==
-	     .Arrow_Up,
-	     Editor_Key(char) ==
-	     .Arrow_Down,
-	     Editor_Key(char) ==
-	     .Arrow_Left,
-	     Editor_Key(char) ==
-	     .Arrow_Right:
+
+	case .Arrow_Up, .Arrow_Down, .Arrow_Left, .Arrow_Right:
 		editor_move_cursor(char)
 	}
 }
@@ -254,6 +259,10 @@ editor_read_key :: proc() -> int {
 
 				if seq[2] == '~' {
 					switch seq[1] {
+					case '1', '7':
+						return int(Editor_Key.Home)
+					case '4', '8':
+						return int(Editor_Key.End)
 					case '5':
 						return int(Editor_Key.Page_Up)
 					case '6':
@@ -271,7 +280,18 @@ editor_read_key :: proc() -> int {
 					return int(Editor_Key.Arrow_Right)
 				case 'D':
 					return int(Editor_Key.Arrow_Left)
+				case 'H':
+					return int(Editor_Key.Home)
+				case 'F':
+					return int(Editor_Key.End)
 				}
+			}
+		} else if seq[0] == 'O' {
+			switch seq[1] {
+			case 'H':
+				return int(Editor_Key.Home)
+			case 'F':
+				return int(Editor_Key.End)
 			}
 		}
 

@@ -42,6 +42,8 @@ Editor_Key :: enum {
 	Arrow_Right,
 	Arrow_Up,
 	Arrow_Down,
+	Page_Up,
+	Page_Down,
 }
 
 ctrl_key :: #force_inline proc(key: u8) -> u8 {
@@ -171,6 +173,14 @@ editor_process_keypress :: proc() {
 	case char == int(ctrl_key('q')):
 		clear_screen_and_reposition_now()
 		os.exit(0)
+	case Editor_Key(char) == .Page_Up:
+		for i := Config.screen_rows; i > 0; i -= 1 {
+			editor_move_cursor(int(Editor_Key.Arrow_Up))
+		}
+	case Editor_Key(char) == .Page_Down:
+		for i := Config.screen_rows; i > 0; i -= 1 {
+			editor_move_cursor(int(Editor_Key.Arrow_Down))
+		}
 	case Editor_Key(char) ==
 	     .Arrow_Up,
 	     Editor_Key(char) ==
@@ -184,7 +194,7 @@ editor_process_keypress :: proc() {
 }
 
 editor_move_cursor :: proc(key: int) {
-	switch Editor_Key(key) {
+	#partial switch Editor_Key(key) {
 	case .Arrow_Left:
 		if Config.cursor_x != 0 {
 			Config.cursor_x -= 1
@@ -216,6 +226,8 @@ editor_read_key :: proc() -> int {
 		log.fatalf("Error: %v", err)
 	}
 
+	log.debugf("read byte: %c", char)
+
 	ESCAPE_SEQUENCE: int : '\x1b'
 
 	if char == ESCAPE_SEQUENCE {
@@ -229,16 +241,37 @@ editor_read_key :: proc() -> int {
 			return ESCAPE_SEQUENCE
 		}
 
+		log.debugf("read 1st next: %c", seq[0])
+		log.debugf("read 2nd next: %c", seq[1])
+
 		if seq[0] == '[' {
-			switch seq[1] {
-			case 'A':
-				return int(Editor_Key.Arrow_Up)
-			case 'B':
-				return int(Editor_Key.Arrow_Down)
-			case 'C':
-				return int(Editor_Key.Arrow_Right)
-			case 'D':
-				return int(Editor_Key.Arrow_Left)
+			if seq[1] >= '0' && seq[1] <= '9' {
+				seq[2], err = io.read_byte(input_stream)
+				if err != .None && err != .EOF {
+					return ESCAPE_SEQUENCE
+				}
+				log.debugf("read 3rd next: %c", seq[2])
+
+				if seq[2] == '~' {
+					switch seq[1] {
+					case '5':
+						return int(Editor_Key.Page_Up)
+					case '6':
+						return int(Editor_Key.Page_Down)
+					}
+				}
+
+			} else {
+				switch seq[1] {
+				case 'A':
+					return int(Editor_Key.Arrow_Up)
+				case 'B':
+					return int(Editor_Key.Arrow_Down)
+				case 'C':
+					return int(Editor_Key.Arrow_Right)
+				case 'D':
+					return int(Editor_Key.Arrow_Left)
+				}
 			}
 		}
 

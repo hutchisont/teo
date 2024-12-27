@@ -70,7 +70,7 @@ main :: proc() {
 	}
 	defer os.close(logh)
 
-	context.logger = log.create_file_logger(logh)
+	context.logger = log.create_file_logger(logh, .Warning)
 	defer log.destroy_file_logger(context.logger)
 
 	enable_raw_mode()

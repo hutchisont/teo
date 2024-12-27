@@ -10,6 +10,7 @@ import "core:c"
 import "core:c/libc"
 import "core:fmt"
 import "core:io"
+import "core:log"
 import "core:os"
 import "core:strings"
 import "core:sys/linux"
@@ -36,17 +37,40 @@ Editor_Config :: struct {
 
 Config: Editor_Config
 
+Editor_Key :: enum {
+	Arrow_Left = 1000,
+	Arrow_Right,
+	Arrow_Up,
+	Arrow_Down,
+}
+
 ctrl_key :: #force_inline proc(key: u8) -> u8 {
 	return key & 0x1f
 }
 
 die :: proc(err: string) {
 	clear_screen_and_reposition_now()
-	fmt.printf(err, libc.errno())
-	os.exit(1)
+	log.fatal(err, libc.errno())
 }
 
 main :: proc() {
+	// setting this up is largely yanked from Karl's understanding the odin programming language book
+	// https://odinbook.com/
+	mode: int = 0
+	when ODIN_OS == .Linux || ODIN_OS == .Darwin {
+		mode = os.S_IRUSR | os.S_IWUSR | os.S_IRGRP | os.S_IROTH
+	}
+
+	logh, logh_err := os.open("log.txt", (os.O_CREATE | os.O_TRUNC | os.O_RDWR), mode)
+	if logh_err != os.ERROR_NONE {
+		fmt.eprintfln("Failed setting up log file")
+		os.exit(1)
+	}
+	defer os.close(logh)
+
+	context.logger = log.create_file_logger(logh)
+	defer log.destroy_file_logger(context.logger)
+
 	enable_raw_mode()
 	init_editor()
 
@@ -82,10 +106,8 @@ enable_raw_mode :: proc() {
 	mode.c_oflag -= {.OPOST}
 	mode.c_cflag += {.CS8}
 	mode.c_lflag -= {.ECHO, .ICANON, .IEXTEN, .ISIG}
-	// don't think we need the below 2, part of the guide but don't have the same
-	// read as c and it seems we block anyway... maybe less than ideal idk
-	//mode.c_cc[.VMIN] = 0
-	//mode.c_cc[.VTIME] = 1
+	mode.c_cc[.VMIN] = 0
+	mode.c_cc[.VTIME] = 1
 
 	res = posix.tcsetattr(posix.STDIN_FILENO, .TCSAFLUSH, &mode)
 	if res != .OK {
@@ -145,39 +167,74 @@ eb_append_string :: proc(eb: ^[dynamic]u8, data: string) {
 
 editor_process_keypress :: proc() {
 	char := editor_read_key()
-	switch char {
-	case ctrl_key('q'):
+	switch {
+	case char == int(ctrl_key('q')):
 		clear_screen_and_reposition_now()
 		os.exit(0)
-	case 'w', 'a', 's', 'd':
+	case Editor_Key(char) ==
+	     .Arrow_Up,
+	     Editor_Key(char) ==
+	     .Arrow_Down,
+	     Editor_Key(char) ==
+	     .Arrow_Left,
+	     Editor_Key(char) ==
+	     .Arrow_Right:
 		editor_move_cursor(char)
 	}
 }
 
-editor_move_cursor :: proc(key: u8) {
-	switch key {
-	case 'a':
+editor_move_cursor :: proc(key: int) {
+	switch Editor_Key(key) {
+	case .Arrow_Left:
 		Config.cursor_x -= 1
-	case 'd':
+	case .Arrow_Right:
 		Config.cursor_x += 1
-	case 'w':
+	case .Arrow_Up:
 		Config.cursor_y -= 1
-	case 's':
+	case .Arrow_Down:
 		Config.cursor_y += 1
 	}
 }
 
-editor_read_key :: proc() -> u8 {
+editor_read_key :: proc() -> int {
 	buf := make([dynamic]byte)
 
 	input_stream := os.stream_from_handle(os.stdin)
 
-	char, err := io.read_byte(input_stream)
-	switch {
-	case err != nil:
+	c, err := io.read_byte(input_stream)
+	char: int = int(c)
+	if err != .None && err != .EOF {
 		clear_screen_and_reposition_now()
-		fmt.eprintf("\nError: %v\r\n", err)
-		os.exit(1)
+		log.fatalf("Error: %v", err)
+	}
+
+	ESCAPE_SEQUENCE: int : '\x1b'
+
+	if char == ESCAPE_SEQUENCE {
+		seq := [3]u8{}
+		seq[0], err = io.read_byte(input_stream)
+		if err != .None && err != .EOF {
+			return ESCAPE_SEQUENCE
+		}
+		seq[1], err = io.read_byte(input_stream)
+		if err != .None && err != .EOF {
+			return ESCAPE_SEQUENCE
+		}
+
+		if seq[0] == '[' {
+			switch seq[1] {
+			case 'A':
+				return int(Editor_Key.Arrow_Up)
+			case 'B':
+				return int(Editor_Key.Arrow_Down)
+			case 'C':
+				return int(Editor_Key.Arrow_Right)
+			case 'D':
+				return int(Editor_Key.Arrow_Left)
+			}
+		}
+
+		return ESCAPE_SEQUENCE
 	}
 
 	return char
@@ -222,7 +279,10 @@ editor_refresh_screen :: proc() {
 	editor_draw_rows(&eb)
 
 	buf := make([]byte, 15, context.temp_allocator)
-	eb_append(&eb, fmt.bprintf(buf, SET_CURSOR_TO_LOCATION, Config.cursor_y + 1, Config.cursor_x + 1))
+	eb_append(
+		&eb,
+		fmt.bprintf(buf, SET_CURSOR_TO_LOCATION, Config.cursor_y + 1, Config.cursor_x + 1),
+	)
 	eb_append(&eb, SHOW_CURSOR)
 
 	os.write(os.stdout, eb[:])

@@ -143,33 +143,37 @@ editor_read_key :: proc() -> u8 {
 }
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
-	for i in 0 ..< config.screen_rows - 1 {
-		eb_append(eb, transmute([]u8)string("~\r\n"))
+	for i in 0 ..< config.screen_rows {
+		eb_append(eb, transmute([]u8)string("~"))
+		eb_append(eb, transmute([]u8)string(CLEAR_CURRENT_LINE))
+		if i < config.screen_rows - 1 {
+			eb_append(eb, transmute([]u8)string("\r\n"))
+		}
 	}
-	eb_append(eb, transmute([]u8)string("~"))
 }
 
 CLEAR_SCREEN :: "\x1b[2J"
+CLEAR_CURRENT_LINE :: "\x1b[K"
 SET_CURSOR_TO_TOP :: "\x1b[H"
+HIDE_CURSOR :: "\x1b[?25l"
+SHOW_CURSOR :: "\x1b[?25h"
 
 clear_screen_and_reposition_now :: proc() {
 	os.write(os.stdout, transmute([]u8)string(CLEAR_SCREEN))
 	os.write(os.stdout, transmute([]u8)string(SET_CURSOR_TO_TOP))
 }
 
-clear_screen_and_reposition :: proc(eb: ^[dynamic]u8) {
-	eb_append(eb, transmute([]u8)string(CLEAR_SCREEN))
-	eb_append(eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
-}
-
 editor_refresh_screen :: proc() {
 	eb := make([dynamic]u8)
 	defer delete(eb)
 
-	clear_screen_and_reposition(&eb)
+	eb_append(&eb, transmute([]u8)string(HIDE_CURSOR))
+	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
+
 	editor_draw_rows(&eb)
 
 	eb_append(&eb, transmute([]u8)string(SET_CURSOR_TO_TOP))
+	eb_append(&eb, transmute([]u8)string(SHOW_CURSOR))
 
 	os.write(os.stdout, eb[:])
 }

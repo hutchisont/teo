@@ -21,14 +21,17 @@ VERSION :: "0.0.1"
 CLEAR_SCREEN :: "\x1b[2J"
 CLEAR_CURRENT_LINE :: "\x1b[K"
 SET_CURSOR_TO_TOP :: "\x1b[H"
+SET_CURSOR_TO_LOCATION :: "\x1b[%d;%dH" // y, x
 HIDE_CURSOR :: "\x1b[?25l"
 SHOW_CURSOR :: "\x1b[?25h"
 
 
 Editor_Config :: struct {
-	orig_term_mode: posix.termios,
+	cursor_x:       int,
+	cursor_y:       int,
 	screen_rows:    int,
 	screen_cols:    int,
+	orig_term_mode: posix.termios,
 }
 
 Config: Editor_Config
@@ -129,7 +132,7 @@ get_window_size :: proc() -> (row: int, col: int, ok: bool) {
 
 eb_append :: proc {
 	eb_append_slice,
-	eb_append_string
+	eb_append_string,
 }
 
 eb_append_slice :: proc(eb: ^[dynamic]u8, data: []u8) {
@@ -203,7 +206,8 @@ editor_refresh_screen :: proc() {
 
 	editor_draw_rows(&eb)
 
-	eb_append(&eb, SET_CURSOR_TO_TOP)
+	buf := make([]byte, 15, context.temp_allocator)
+	eb_append(&eb, fmt.bprintf(buf, SET_CURSOR_TO_LOCATION, Config.cursor_y + 1, Config.cursor_x + 1))
 	eb_append(&eb, SHOW_CURSOR)
 
 	os.write(os.stdout, eb[:])

@@ -11,6 +11,7 @@ import "core:c/libc"
 import "core:fmt"
 import "core:io"
 import "core:os"
+import "core:strings"
 import "core:sys/linux"
 import "core:sys/posix"
 
@@ -158,13 +159,15 @@ editor_read_key :: proc() -> u8 {
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< Config.screen_rows {
 		if i == Config.screen_rows / 3 {
-			buf := make([]byte, 80, context.temp_allocator)
+			buf := make([]byte, Config.screen_rows, context.temp_allocator)
 			fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
-			if len(buf) > Config.screen_cols {
-				eb_append(eb, buf[:Config.screen_cols])
-			} else {
-				eb_append(eb, buf)
-			}
+			centered := strings.center_justify(
+				transmute(string)buf,
+				Config.screen_cols,
+				" ",
+				context.temp_allocator,
+			)
+			eb_append(eb, transmute([]u8)centered)
 		} else {
 			eb_append(eb, transmute([]u8)string("~"))
 		}

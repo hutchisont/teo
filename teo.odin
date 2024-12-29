@@ -83,7 +83,11 @@ main :: proc() {
 
 	enable_raw_mode()
 	init_editor()
-	editor_open()
+
+	args := os.args
+	if len(args) >= 2 {
+		editor_open(args[1])
+	}
 
 	for {
 		free_all(context.temp_allocator)
@@ -325,7 +329,7 @@ editor_read_key :: proc() -> int {
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< Config.screen_rows {
 		if i >= Config.num_rows {
-			if i == Config.screen_rows / 3 {
+			if Config.num_rows == 0 && i == Config.screen_rows / 3 {
 				buf := make([]byte, Config.screen_rows, context.temp_allocator)
 				fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
 				padding := (Config.screen_cols - len(buf)) / 2
@@ -375,9 +379,28 @@ editor_refresh_screen :: proc() {
 	os.write(os.stdout, eb[:])
 }
 
-editor_open :: proc() {
-	data: string : "Hello, world!"
+editor_open :: proc(filename: string) {
+	fh, f_err := os.open(filename)
+	if f_err != nil {
+		sb := strings.builder_make(context.temp_allocator)
+		strings.write_string(&sb, "Failed to open file: ")
+		strings.write_string(&sb, filename)
+		the_string := strings.to_string(sb)
+		die(the_string)
+	}
+	defer os.close(fh)
 
-	Config.row.data = transmute([]u8)strings.clone(data)
+	data, ok := os.read_entire_file(fh, allocator = context.temp_allocator)
+	if !ok {
+		sb := strings.builder_make(context.temp_allocator)
+		strings.write_string(&sb, "Failed to read file: ")
+		strings.write_string(&sb, filename)
+		the_string := strings.to_string(sb)
+		die(the_string)
+	}
+
+	lines := strings.split_lines(string(data), context.temp_allocator)
+
+	Config.row.data = transmute([]u8)strings.clone(lines[0])
 	Config.num_rows += 1
 }

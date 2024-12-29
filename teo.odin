@@ -35,8 +35,7 @@ Editor_Config :: struct {
 	cursor_y:       int,
 	screen_rows:    int,
 	screen_cols:    int,
-	num_rows:       int,
-	row:            Editor_Row,
+	rows:            [dynamic]Editor_Row,
 	orig_term_mode: posix.termios,
 }
 
@@ -328,8 +327,8 @@ editor_read_key :: proc() -> int {
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< Config.screen_rows {
-		if i >= Config.num_rows {
-			if Config.num_rows == 0 && i == Config.screen_rows / 3 {
+		if i >= len(Config.rows) {
+			if len(Config.rows) == 0 && i == Config.screen_rows / 3 {
 				buf := make([]byte, Config.screen_rows, context.temp_allocator)
 				fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
 				padding := (Config.screen_cols - len(buf)) / 2
@@ -346,7 +345,9 @@ editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 				eb_append(eb, "~")
 			}
 		} else {
-			eb_append(eb, Config.row.data)
+			for row in Config.rows {
+				eb_append(eb, row.data)
+			}
 		}
 
 		eb_append(eb, CLEAR_CURRENT_LINE)
@@ -401,6 +402,6 @@ editor_open :: proc(filename: string) {
 
 	lines := strings.split_lines(string(data), context.temp_allocator)
 
-	Config.row.data = transmute([]u8)strings.clone(lines[0])
-	Config.num_rows += 1
+	to_append := transmute([]u8)strings.clone(lines[0])
+	append(&Config.rows, )
 }

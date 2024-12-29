@@ -35,6 +35,7 @@ Editor_Config :: struct {
 	cursor_x:       int,
 	cursor_y:       int,
 	row_offset:     int,
+	col_offset:     int,
 	screen_rows:    int,
 	screen_cols:    int,
 	rows:           [dynamic]Editor_Row,
@@ -223,13 +224,15 @@ editor_process_keypress :: proc() {
 }
 
 editor_move_cursor :: proc(key: int) {
+	cur_row := Config.cursor_y >= len(Config.rows) ? -1 : Config.cursor_y
+
 	#partial switch Editor_Key(key) {
 	case .Arrow_Left:
 		if Config.cursor_x != 0 {
 			Config.cursor_x -= 1
 		}
 	case .Arrow_Right:
-		if Config.cursor_x != Config.screen_cols - 1 {
+		if cur_row != -1 && Config.cursor_x < len(Config.rows[cur_row].data) {
 			Config.cursor_x += 1
 		}
 	case .Arrow_Up:
@@ -240,6 +243,16 @@ editor_move_cursor :: proc(key: int) {
 		if Config.cursor_y < len(Config.rows) {
 			Config.cursor_y += 1
 		}
+	}
+
+	row_len: int
+	cur_row = Config.cursor_y >= len(Config.rows) ? -1 : Config.cursor_y
+	if cur_row != -1 {
+		row_len = len(Config.rows[cur_row].data)
+	}
+
+	if Config.cursor_x > row_len {
+		Config.cursor_x = row_len
 	}
 }
 
@@ -348,10 +361,20 @@ editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 				eb_append(eb, "~")
 			}
 		} else {
-			if len(Config.rows[file_row].data) > Config.screen_cols {
-				eb_append(eb, Config.rows[file_row].data[:Config.screen_cols])
+			data_len := len(Config.rows[file_row].data)
+			possible_view_end_index := Config.col_offset + Config.screen_cols
+
+			len_to_draw := data_len - Config.col_offset
+			draw_range_lower := Config.col_offset
+			draw_range_upper := data_len - 0
+			if len_to_draw < 0 {
+				len_to_draw = 0
 			}
-			eb_append(eb, Config.rows[file_row].data)
+
+			if len_to_draw > Config.screen_cols {
+				len_to_draw = Config.screen_cols
+			}
+			eb_append(eb, Config.rows[file_row].data[Config.col_offset:len_to_draw])
 		}
 
 		eb_append(eb, CLEAR_CURRENT_LINE)
@@ -370,9 +393,15 @@ editor_scroll :: proc() {
 	if Config.cursor_y < Config.row_offset {
 		Config.row_offset = Config.cursor_y
 	}
-
 	if Config.cursor_y >= Config.row_offset + Config.screen_rows {
 		Config.row_offset = Config.cursor_y - Config.screen_rows + 1
+	}
+
+	if Config.cursor_x < Config.col_offset {
+		Config.col_offset = Config.cursor_x
+	}
+	if Config.cursor_x >= Config.col_offset + Config.screen_cols {
+		Config.col_offset = Config.cursor_x - Config.screen_cols + 1
 	}
 }
 
@@ -393,7 +422,7 @@ editor_refresh_screen :: proc() {
 			buf,
 			SET_CURSOR_TO_LOCATION,
 			(Config.cursor_y - Config.row_offset) + 1,
-			Config.cursor_x + 1,
+			(Config.cursor_x - Config.col_offset) + 1,
 		),
 	)
 	eb_append(&eb, SHOW_CURSOR)

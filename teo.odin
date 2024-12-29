@@ -12,6 +12,7 @@ import "core:fmt"
 import "core:io"
 import "core:log"
 import "core:os"
+import "core:slice"
 import "core:strings"
 import "core:sys/linux"
 import "core:sys/posix"
@@ -33,9 +34,10 @@ Editor_Row :: struct {
 Editor_Config :: struct {
 	cursor_x:       int,
 	cursor_y:       int,
+	row_offset:     int,
 	screen_rows:    int,
 	screen_cols:    int,
-	rows:            [dynamic]Editor_Row,
+	rows:           [dynamic]Editor_Row,
 	orig_term_mode: posix.termios,
 }
 
@@ -235,7 +237,7 @@ editor_move_cursor :: proc(key: int) {
 			Config.cursor_y -= 1
 		}
 	case .Arrow_Down:
-		if Config.cursor_y != Config.screen_rows - 1 {
+		if Config.cursor_y < len(Config.rows) {
 			Config.cursor_y += 1
 		}
 	}
@@ -327,7 +329,8 @@ editor_read_key :: proc() -> int {
 
 editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 	for i in 0 ..< Config.screen_rows {
-		if i >= len(Config.rows) {
+		file_row := i + Config.row_offset
+		if file_row >= len(Config.rows) {
 			if len(Config.rows) == 0 && i == Config.screen_rows / 3 {
 				buf := make([]byte, Config.screen_rows, context.temp_allocator)
 				fmt.bprintf(buf, "Teo editor -- version %v", VERSION)
@@ -345,9 +348,10 @@ editor_draw_rows :: proc(eb: ^[dynamic]u8) {
 				eb_append(eb, "~")
 			}
 		} else {
-			for row in Config.rows {
-				eb_append(eb, row.data)
+			if len(Config.rows[file_row].data) > Config.screen_cols {
+				eb_append(eb, Config.rows[file_row].data[:Config.screen_cols])
 			}
+			eb_append(eb, Config.rows[file_row].data)
 		}
 
 		eb_append(eb, CLEAR_CURRENT_LINE)
@@ -362,7 +366,19 @@ clear_screen_and_reposition_now :: proc() {
 	os.write(os.stdout, transmute([]u8)string(SET_CURSOR_TO_TOP))
 }
 
+editor_scroll :: proc() {
+	if Config.cursor_y < Config.row_offset {
+		Config.row_offset = Config.cursor_y
+	}
+
+	if Config.cursor_y >= Config.row_offset + Config.screen_rows {
+		Config.row_offset = Config.cursor_y - Config.screen_rows + 1
+	}
+}
+
 editor_refresh_screen :: proc() {
+	editor_scroll()
+
 	eb := make([dynamic]u8, context.temp_allocator)
 
 	eb_append(&eb, HIDE_CURSOR)
@@ -373,7 +389,12 @@ editor_refresh_screen :: proc() {
 	buf := make([]byte, 15, context.temp_allocator)
 	eb_append(
 		&eb,
-		fmt.bprintf(buf, SET_CURSOR_TO_LOCATION, Config.cursor_y + 1, Config.cursor_x + 1),
+		fmt.bprintf(
+			buf,
+			SET_CURSOR_TO_LOCATION,
+			(Config.cursor_y - Config.row_offset) + 1,
+			Config.cursor_x + 1,
+		),
 	)
 	eb_append(&eb, SHOW_CURSOR)
 
@@ -402,6 +423,13 @@ editor_open :: proc(filename: string) {
 
 	lines := strings.split_lines(string(data), context.temp_allocator)
 
-	to_append := transmute([]u8)strings.clone(lines[0])
-	append(&Config.rows, )
+	for line in lines {
+		to_append := transmute([]u8)line
+		editor_append_row(to_append)
+	}
+}
+
+editor_append_row :: proc(row: []u8) {
+	new_row := Editor_Row{slice.clone(row)}
+	append(&Config.rows, new_row)
 }
